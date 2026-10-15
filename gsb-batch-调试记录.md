@@ -347,3 +347,50 @@ gsb-task-007-b    6e38fba1b4fbf94fc089123032f9c62cccc30933   # 产物快照 B，
 - 仓库：https://github.com/Rrr119/gsb-task-007 （private）
 - 网络备注：本机 Clash 代理（`127.0.0.1:7897`）会间歇性 TLS 握手失败，推送最终用"直连/代理自动重试"成功；脚本默认账号已改为 `Rrr119`。
 - 结论：需求 1 / 2 / 3 均已闭环；D7 的"无 origin 时只警告不提交、配好 origin 后重跑即可补推"也在真实场景中得到验证（补配 origin 后重跑采集/推送成功）。
+
+***
+
+## 9. 调试记录3：推送产物到 GitHub 账号错误（推送到别的 GitHub 账号中）
+
+> 对应作业需求第 3 条（产物自动推送到"自己的 GitHub"）。本机 GitHub 环境存在多个账号凭据，推送目标默认落在旧账号上，导致产物出现在"别的账号"。
+
+### 9.1 现象
+
+- 跑批完成、产物推送后，用户打开 GitHub 发现产物出现在**别的账号**名下（旧账号 `736242160`，显示名 CFH），而不是用户自己的账号 **Rrr119**。
+- 用户反馈："我的 github 账号是 Rrr119，你是不是推送错了"。
+
+### 9.2 排查（按证据逐项确认）
+
+1. **确认本机 gh CLI 登录态**：`gh auth status` → 已登录的账号只有 `736242160`（显示名 CFH，Active account: true），说明 gh 的推送身份默认是旧账号。
+2. **确认用户真实账号**：浏览器打开 `github.com/settings/profile` → 用户账号确为 **Rrr119**，邮箱 `2718445769@qq.com`（与用户自述一致）。结论：用户没错，是推送目标配置错了。
+3. **一次误判插曲**：排查早期用 `gh api user/Rrr119` 查询返回 404，一度怀疑"Rrr119 不存在"。核对后发现是 **GitHub API 路径用错**：用户查询接口应为 `/users/<name>`（即 `gh api users/Rrr119`），`user/<name>` 不是查询路径。路径规范更正后即可正常查询。
+4. **定位根因（两条证据链）**：
+   - 队列配置：`D:\gsb\batch-queue.json` 的 `github_user` 字段配置的是 `736242160`（早期脚本环境沿用旧账号）；
+   - 登录凭据：本机 gh CLI keyring 中的 token 归属 `736242160`。
+   - 结论：脚本按"队列配置的账号"生成推送目标（origin URL 与结果链接），登录态也是旧账号 → 产物必然落到 `736242160/gsb-task-007`。
+
+### 9.3 修改（基于以上证据）
+
+1. **队列账号修正**：`batch-queue.json` 的 `github_user` 改为 `Rrr119`；脚本据此生成 `https://github.com/Rrr119/gsb-task-007.git` 与结果链接（`batch-results.json` 的链接占位同步改为 Rrr119 域）。
+2. **登录身份切换**：`gh auth logout --user 736242160` → 重新走设备码登录 Rrr119（浏览器确认授权），使 `gh auth status` 显示 active = Rrr119、token 具备 repo 权限。
+3. **origin 修正并重推**：任务根与 A/B 工作区 `git remote set-url origin https://github.com/Rrr119/gsb-task-007.git`，重新 `git push origin main / gsb-task-007-a / gsb-task-007-b`。
+4. **验证闭环**：推送后用 `git ls-remote origin` 核对远端 SHA == 本地 HEAD；用 `gh repo view Rrr119/gsb-task-007` 确认仓库归属与可见性（本次最终设为 public 供审核访问）。
+
+### 9.4 结果（验证数据）
+
+```
+main              3aa08a01ccc1f2b59cfa3fbbfeaaa028a8b141d7   # rollouts/rollout-a.jsonl、rollout-b.jsonl
+gsb-task-007-a    5f20b621052646c78f7c500c29f8e7aca0193ef7   # A 产物快照，父提交 = 初始快照 fada2aab…
+gsb-task-007-b    6e38fba1b4fbf94fc089123032f9c62cccc30933   # B 产物快照，父提交 = 初始快照 fada2aab…
+```
+
+- 产物仓库最终归属：`https://github.com/Rrr119/gsb-task-007`（public），产物快照 permalink 形式 `https://github.com/Rrr119/gsb-task-007/commit/<SHA>` 可直接用于作业表；
+- 交付物仓库：`https://github.com/Rrr119/gsb-batch`（public，脚本 + 调试记录 + 操作指引 + 技能说明）；
+- 与 §8.4 相互印证：账号迁移、origin 补配、远端 SHA 校验三项改动均已在真实仓库上验证。
+
+### 9.5 依据小结
+
+- 账号归属判定：`gh auth status` 与浏览器 `github.com/settings/profile` 实测（不要凭记忆或单一来源下结论）；
+- "Rrr119 不存在"是误判：GitHub API 用户路径规范为 `/users/<name>`（`gh api users/Rrr119`），早期 404 源于路径用错，与账号是否存在无关；
+- 推送成功的判据：`git ls-remote` 远端 SHA 与本地 HEAD 一致（git-push 技能规则），而非"命令返回 0"；
+- 改进沉淀：脚本默认账号、队列 `github_user`、origin URL、结果链接四处配置须保持一致，避免"产物在别的账号"。
