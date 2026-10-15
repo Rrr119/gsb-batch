@@ -1,0 +1,22 @@
+﻿{
+  "github_user": "Rrr119",
+  "push_artifacts": false,
+  "tasks": [
+    {
+      "task": "gsb-task-007",
+      "prompt_file": "D:\\gsb\\gsb-task-007\\prompt.md",
+      "init_sha": "",
+      "verify_a": "",
+      "verify_b": "",
+      "push_artifacts": false
+    },
+    {
+      "task": "gsb-task-008",
+      "prompt_file": "D:\\gsb\\gsb-task-008\\prompt.md",
+      "init_sha": "",
+      "verify_a": "python -m unittest discover",
+      "verify_b": "python -m unittest discover",
+      "push_artifacts": true
+    }
+  ]
+}
